@@ -1,22 +1,134 @@
-﻿
-Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 14
-VisualStudioVersion = 14.0.25123.0
-MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RICOH Printer Project", "RICOH Printer Project\RICOH Printer Project.csproj", "{6C388E59-CAD6-448E-BA31-D0947D5AD2A5}"
-EndProject
-Global
-	GlobalSection(SolutionConfigurationPlatforms) = preSolution
-		Debug|Any CPU = Debug|Any CPU
-		Release|Any CPU = Release|Any CPU
-	EndGlobalSection
-	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{6C388E59-CAD6-448E-BA31-D0947D5AD2A5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{6C388E59-CAD6-448E-BA31-D0947D5AD2A5}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{6C388E59-CAD6-448E-BA31-D0947D5AD2A5}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{6C388E59-CAD6-448E-BA31-D0947D5AD2A5}.Release|Any CPU.Build.0 = Release|Any CPU
-	EndGlobalSection
-	GlobalSection(SolutionProperties) = preSolution
-		HideSolutionNode = FALSE
-	EndGlobalSection
-EndGlobal
+using System;
+using System.Collections.Generic;
+using iTextSharp.text;
+using iTextSharp.text.pdf;
+using iTextSharp.text.pdf.parser;
+using System.IO;
+
+namespace RICOH_Printer_Project 
+{
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            string sourcePdfPath = GetSourcePath();
+            Console.WriteLine("Source is: " + sourcePdfPath);
+            string outputPdfPath = GetOutputPath();
+            Console.WriteLine("Destination is " + outputPdfPath);
+            List<int> startPages = GetStartPage();
+            List<int> endPages = GetEndPage(startPages);
+               foreach (int item in startPages)
+               {
+                   Console.WriteLine(item);
+                   Console.WriteLine(endPages);
+                   //SplitPDF(sourcePdfPath, outputPdfPath, item, );
+               }
+            foreach (int item in endPages)
+            {
+                Console.WriteLine(item);
+            }
+
+            Console.ReadLine();
+        }
+        static public string GetSourcePath()
+        {
+            string filePath = @"C:\Users\vtordesillas\Desktop\";
+            string fileName = "DriverManifestsample.pdf";
+            string result = filePath + fileName;
+            return result;
+        }
+        static public string GetOutputPath()
+        {
+            string folderName = "Split Manifest";
+            string fileName = "Split Manifest.pdf";
+            CreateFolder(ref folderName);
+            string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            string result = desktopPath + @"\" + folderName + @"\" + fileName;
+            return result;
+        }
+        static void CreateFolder(ref string name)
+        {
+            string path = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            if (!Directory.Exists(path + @"\" + name))
+            {
+                Directory.CreateDirectory(path + @"\" + name);
+            }
+            else
+            {
+                Directory.Delete(path + @"\" + name, true);
+                Directory.CreateDirectory(path + @"\" + name);
+            }
+        }
+        static public List<int> GetStartPage()
+        {
+            string sourcePdfPath = GetSourcePath();
+            string searchParameter = "Page 1";
+            List<int> startPages = ReadPdfFile(sourcePdfPath, searchParameter);
+            return startPages;
+        }
+        static public List<int> GetEndPage(List<int> startPages)
+        {
+            List<int> endPages = new List<int>();
+            foreach (int item in startPages)
+            {
+                int endPageTmp = item - 1;
+                endPages.Add(endPageTmp);   
+            }
+            endPages.Remove(0);
+            string sourcePdfPath = GetSourcePath();
+            PdfReader pdf = new PdfReader(sourcePdfPath);
+            int lastPage = pdf.NumberOfPages;
+            endPages.Add(lastPage);
+            return endPages;
+
+        }
+        static List<int> ReadPdfFile(string sourcePdfPath, string searchParameter)
+        {
+            List<int> pages = new List<int>();
+            if (File.Exists(sourcePdfPath))
+            {
+                PdfReader pdfReader = new PdfReader(sourcePdfPath);
+                for (int page = 1; page <= pdfReader.NumberOfPages; page++)
+                {
+                    ITextExtractionStrategy strategy = new SimpleTextExtractionStrategy();
+
+                    string currentPageText = PdfTextExtractor.GetTextFromPage(pdfReader, page, strategy);
+                    if (currentPageText.Contains(searchParameter))
+                    {
+                        pages.Add(page);
+                    }
+                }
+                pdfReader.Close();
+            }
+            return pages;
+        }
+        static void SplitPDF(string sourcePdfPath, string outputPdfPath, int startPage, int endPage)
+        {
+            PdfReader reader = null;
+            Document sourceDocument = null;
+            PdfCopy pdfCopyProvider = null;
+            PdfImportedPage importedPage = null;
+
+            try
+            {
+                reader = new PdfReader(sourcePdfPath);
+                sourceDocument = new Document(reader.GetPageSizeWithRotation(startPage));
+                pdfCopyProvider = new PdfCopy(sourceDocument,
+                    new FileStream(outputPdfPath, FileMode.Create));
+                sourceDocument.Open();
+                for (int i = startPage; i <= endPage; i++)
+                {
+                    importedPage = pdfCopyProvider.GetImportedPage(reader, i);
+                    pdfCopyProvider.AddPage(importedPage);
+                }
+                sourceDocument.Close();
+                reader.Close();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex);
+            }
+        }
+
+    }
+}
