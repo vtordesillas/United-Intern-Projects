@@ -11,58 +11,61 @@ namespace RICOH_Printer_Project
     {
         static void Main(string[] args)
         {
+            Console.WriteLine("Please make sure manifest file is saved");
+            Console.WriteLine("as PDF in desktop and named \"ManifestToSplit\" ");
+            Console.WriteLine("Press Enter");
+            Console.ReadLine();
             string sourcePdfPath = GetSourcePath();
             Console.WriteLine("Source is: " + sourcePdfPath);
-            string outputPdfPath = GetOutputPath();
-            Console.WriteLine("Destination is " + outputPdfPath);
+            string desitnationDirectory = CreateDestinationDirectory();
+            Console.WriteLine("Destination Directory is " + desitnationDirectory);
             List<int> startPages = GetStartPage();
             List<int> endPages = GetEndPage(startPages);
-               foreach (int item in startPages)
-               {
-                   Console.WriteLine(item);
-                   Console.WriteLine(endPages);
-                   //SplitPDF(sourcePdfPath, outputPdfPath, item, );
-               }
-            foreach (int item in endPages)
-            {
-                Console.WriteLine(item);
-            }
 
+            //ACTUAL SPLITTING
+
+            for (var i = 0; i < startPages.Count; i++)
+            {
+                int startPage = startPages[i];
+                int endPage = endPages[i];
+
+                Console.WriteLine("Start Page is: {0}", startPage);
+                Console.WriteLine("End Page is: {0}", endPage);
+                Console.WriteLine("----------------------");
+                string outputPdfPath = desitnationDirectory + "Manifest Part " + i + @".pdf";
+                SplitPDF(sourcePdfPath, outputPdfPath, startPage, endPage);
+            }
+            Console.WriteLine("----------------------");
+            Console.WriteLine("Splitting finalized. Press Enter");
             Console.ReadLine();
         }
         static public string GetSourcePath()
         {
-            string filePath = @"C:\Users\vtordesillas\Desktop\";
-            string fileName = "DriverManifestsample.pdf";
-            string result = filePath + fileName;
+            string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop) + @"\";
+            string fileName = "DriverManifest.pdf";
+            string result = desktopPath + fileName;
             return result;
         }
-        static public string GetOutputPath()
+        static public string CreateDestinationDirectory()
         {
-            string folderName = "Split Manifest";
-            string fileName = "Split Manifest.pdf";
-            CreateFolder(ref folderName);
             string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-            string result = desktopPath + @"\" + folderName + @"\" + fileName;
-            return result;
-        }
-        static void CreateFolder(ref string name)
-        {
-            string path = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-            if (!Directory.Exists(path + @"\" + name))
+            string directoryPath = "Split Manifest";
+            string outputDirectory = desktopPath + @"\" + directoryPath + @"\";
+            if (!Directory.Exists(outputDirectory))
             {
-                Directory.CreateDirectory(path + @"\" + name);
+                Directory.CreateDirectory(outputDirectory);
             }
             else
             {
-                Directory.Delete(path + @"\" + name, true);
-                Directory.CreateDirectory(path + @"\" + name);
+                Directory.Delete(outputDirectory, true);
+                Directory.CreateDirectory(outputDirectory);
             }
+            return outputDirectory;
         }
         static public List<int> GetStartPage()
         {
             string sourcePdfPath = GetSourcePath();
-            string searchParameter = "Page 1";
+            string searchParameter = "Total ";
             List<int> startPages = ReadPdfFile(sourcePdfPath, searchParameter);
             return startPages;
         }
