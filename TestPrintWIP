@@ -1,0 +1,64 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace TestConsole1
+{
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            string pdfName = @"\Split Manifest\Manifest Part 0.pdf";
+            string fullPath = desktopPath + pdfName;
+            PrintPDF(fullPath);
+            Console.ReadLine();
+        }
+
+        static void PrintPDF(string splitPdfPath)
+        {
+            var openPdf = new ProcessStartInfo(splitPdfPath);
+            openPdf.UseShellExecute = true;
+            openPdf.Verb = "print";
+            var process = System.Diagnostics.Process.Start(openPdf);
+        }
+
+
+        public void SendData(string zpl, IPAddress printerIP, int printerPort)
+        {
+            if (printerIP != null && printerPort != null)
+            {
+                EndPoint ep = new IPEndPoint(printerIP, printerPort);
+
+                try
+                {
+                    using (Socket sock = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
+                    {
+                        sock.Connect(ep);
+                        NetworkStream ns = new NetworkStream(sock);
+
+
+
+                        //byte[] toSend = Encoding.ASCII.GetBytes(zpl);
+                        byte[] toSend = File.ReadAllBytes("c:\\temp\\Weekly Drop Communication_081314.pdf");
+
+
+
+                        ns.Write(toSend, 0, toSend.Length);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex);
+                }
+            }
+
+        }
+    }
+}
