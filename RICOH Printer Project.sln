@@ -4,6 +4,7 @@ using iTextSharp.text;
 using iTextSharp.text.pdf;
 using iTextSharp.text.pdf.parser;
 using System.IO;
+using System.Diagnostics;
 
 namespace RICOH_Printer_Project 
 {
@@ -23,21 +24,29 @@ namespace RICOH_Printer_Project
             List<int> endPages = GetEndPage(startPages);
 
             //ACTUAL SPLITTING
-
+            List<string> pdfPaths = new List<string>();
             for (var i = 0; i < startPages.Count; i++)
             {
                 int startPage = startPages[i];
                 int endPage = endPages[i];
-
                 Console.WriteLine("Start Page is: {0}", startPage);
                 Console.WriteLine("End Page is: {0}", endPage);
                 Console.WriteLine("----------------------");
                 string outputPdfPath = desitnationDirectory + "Manifest Part " + i + @".pdf";
                 SplitPDF(sourcePdfPath, outputPdfPath, startPage, endPage);
+            //ADD EACH PATH TO LIST
+                pdfPaths.Add(outputPdfPath);
             }
             Console.WriteLine("----------------------");
             Console.WriteLine("Splitting finalized. Press Enter");
             Console.ReadLine();
+            Console.WriteLine("Starting Printing Process");
+            foreach (string item in pdfPaths)
+            {
+                Console.WriteLine("Printing path {0}", item);
+                PrintPDF(item);
+
+            }
         }
         static public string GetSourcePath()
         {
@@ -49,8 +58,8 @@ namespace RICOH_Printer_Project
         static public string CreateDestinationDirectory()
         {
             string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-            string directoryPath = "Split Manifest";
-            string outputDirectory = desktopPath + @"\" + directoryPath + @"\";
+            string directoryName = "Split Manifest";
+            string outputDirectory = desktopPath + @"\" + directoryName + @"\";
             if (!Directory.Exists(outputDirectory))
             {
                 Directory.CreateDirectory(outputDirectory);
@@ -133,5 +142,12 @@ namespace RICOH_Printer_Project
             }
         }
 
+        static void PrintPDF(string splitPdfPath)
+        {
+            var openPdf = new ProcessStartInfo(splitPdfPath);
+            openPdf.UseShellExecute = true;
+            openPdf.Verb = "print";
+            var process = Process.Start(openPdf);
+        }
     }
 }
