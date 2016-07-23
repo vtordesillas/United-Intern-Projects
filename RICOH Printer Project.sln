@@ -5,8 +5,10 @@ using iTextSharp.text.pdf;
 using iTextSharp.text.pdf.parser;
 using System.IO;
 using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
 
-namespace RICOH_Printer_Project 
+namespace RICOH_Printer_Project
 {
     class Program
     {
@@ -34,17 +36,22 @@ namespace RICOH_Printer_Project
                 Console.WriteLine("----------------------");
                 string outputPdfPath = desitnationDirectory + "Manifest Part " + i + @".pdf";
                 SplitPDF(sourcePdfPath, outputPdfPath, startPage, endPage);
-            //ADD EACH PATH TO LIST
+                //ADD EACH PATH TO LIST
                 pdfPaths.Add(outputPdfPath);
             }
             Console.WriteLine("----------------------");
             Console.WriteLine("Splitting finalized. Press Enter");
             Console.ReadLine();
             Console.WriteLine("Starting Printing Process");
+
+            string strIP = "198.62.42.1";
+            int portNum = 4444;
+            IPAddress printerIP = IPAddress.Parse(strIP);
+
             foreach (string item in pdfPaths)
             {
                 Console.WriteLine("Printing path {0}", item);
-                PrintPDF(item);
+                SendData(item, printerIP, portNum);
 
             }
         }
@@ -84,7 +91,7 @@ namespace RICOH_Printer_Project
             foreach (int item in startPages)
             {
                 int endPageTmp = item - 1;
-                endPages.Add(endPageTmp);   
+                endPages.Add(endPageTmp);
             }
             endPages.Remove(0);
             string sourcePdfPath = GetSourcePath();
@@ -142,12 +149,41 @@ namespace RICOH_Printer_Project
             }
         }
 
+        
+        
         static void PrintPDF(string splitPdfPath)
         {
             var openPdf = new ProcessStartInfo(splitPdfPath);
             openPdf.UseShellExecute = true;
             openPdf.Verb = "print";
             var process = Process.Start(openPdf);
+            
         }
+        static void SendData(string fileName, IPAddress printerIP, int printerPort)
+        {
+            
+                EndPoint ep = new IPEndPoint(printerIP, printerPort);
+
+                try
+                {
+                    using (Socket sock = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
+                    {
+                        sock.Connect(ep);
+                        NetworkStream ns = new NetworkStream(sock);
+
+                        byte[] toSend = File.ReadAllBytes(fileName);
+                    
+                        ns.Write(toSend, 0, toSend.Length);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex);
+                }
+            
+
+        }
+
+
     }
 }
