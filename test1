@@ -1,0 +1,43 @@
+Function Get_Store_Net_Cost_Of_Item(p_Item_Num        In Inv_Item.Item_Num%Type,
+                                      p_Sales_Uom_Code  In Qty_Uom_Lookup.Code%Type,
+                                      p_Customer_Num    In Crm_Customer.Customer_Num%Type,
+                                      p_Warehouse_Num   In Inv_Warehouse.Warehouse_Num%Type,
+                                      p_Weight_Uom_Code In Qty_Uom_Lookup.Code%Type,
+                                      p_Weight          In Inv_Item_Qty_Uom.Weight%Type)
+    Return Number As
+    v_Sales_Price_Group_Id Sal_Sales_Price_Group.Sales_Price_Group_Id%Type := 0;
+    v_Item_Id              Inv_Item.Item_Id%Type := 0;
+    v_Customer_Id          Crm_Customer.Customer_Id%Type := 0;
+    v_Sales_Uom_Id         Inv_Item.Sales_Uom_Id%Type := 0;
+    v_Warehouse_Id         Inv_Warehouse.Warehouse_Id%Type := 0;
+    v_Unit_Cost            Number(20, 5) := 0;
+    v_Weight_Uom_Id        Inv_Item_Qty_Uom.Weight_Uom_Id%Type := 0;
+    Vmessage               Uware_Error_Message.Message%Type := '';
+    Vdb_Error_Code         Uware_Error_Message.Db_Error_Code%Type := '';
+    Vdb_Error_Text         Uware_Error_Message.Db_Error_Message%Type := '';
+  Begin
+    v_Item_Id       := Get_Item_Id_By_Item_Num(p_Item_Num);
+    v_Customer_Id   := Get_Customer_Id_By_Num(p_Customer_Num);
+    v_Sales_Uom_Id  := Get_Uom_Id_By_Uom_Code(p_Sales_Uom_Code);
+    v_Warehouse_Id  := Get_Warehouse_Id_By_Num(p_Warehouse_Num);
+    v_Weight_Uom_Id := Get_Uom_Id_By_Uom_Code(p_Weight_Uom_Code);
+    v_Unit_Cost     := Get_Store_Net_Cost_Of_Item(v_Item_Id,
+                                                  v_Sales_Uom_Id,
+                                                  v_Customer_Id,
+                                                  v_Warehouse_Id,
+                                                  v_Weight_Uom_Id,
+                                                  p_Weight);
+    Return v_Unit_Cost;
+  Exception
+    When Others Then
+      Vmessage       := 'Error in retrieving store cost for ';
+      Vmessage       := Vmessage || p_Item_Num || ' for ' || p_Customer_Num ||
+                        ' for ';
+      Vmessage       := Vmessage || Sysdate || '.';
+      Vdb_Error_Code := Sqlcode;
+      Vdb_Error_Text := Sqlerrm;
+      --uware_error_message_log(VMESSAGE,
+      --    VDB_ERROR_CODE, VDB_ERROR_TEXT,USER, SYSDATE, 'PKG_UWARE_UTIL.GET_STORE_NET_COST_OF_ITEM');
+      v_Unit_Cost := 0;
+      Return v_Unit_Cost;
+  End Get_Store_Net_Cost_Of_Item;
