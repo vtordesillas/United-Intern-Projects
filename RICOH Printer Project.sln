@@ -14,58 +14,103 @@ namespace RICOH_Printer_Project
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("Please make sure manifest file is saved");
-            Console.WriteLine("as PDF in desktop and named \"ManifestToSplit\" ");
+            Console.WriteLine("------------------------------------------------------------------------------------------");
+            string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            string inputfolderPath = desktopPath + @"\Manifest Source";
+            string outputfolderPath = desktopPath + @"\Split Manifests";
+            Console.WriteLine("Searching for Directories");
+            Console.WriteLine("------------------------------------------------------------------------------------------");
+            if (Directory.Exists(inputfolderPath))
+            {
+                Console.WriteLine("Directory found!");
+            }
+            else
+            {
+                Console.WriteLine("Directory not found. Creating new directory 'Split Manifests' in Desktop.");
+                string sourceDirectory = CreateDestinationDirectory("Manifest Source");
+            }
+            string desitnationDirectory = CreateDestinationDirectory("Split Manifests");
+            Console.WriteLine("Please make sure all manifest files are saved");
+            Console.WriteLine("in  PDF format in the \"Manifest Source\" Directory");
             Console.WriteLine("Press Enter");
             Console.ReadLine();
-            string sourcePdfPath = GetSourcePath();
-            Console.WriteLine("Source is: " + sourcePdfPath);
-            string desitnationDirectory = CreateDestinationDirectory();
-            Console.WriteLine("Destination Directory is " + desitnationDirectory);
-            List<int> startPages = GetStartPage();
-            List<int> endPages = GetEndPage(startPages);
+            string[] pathsToSplit = Directory.GetFiles(inputfolderPath);
 
-            //ACTUAL SPLITTING
-            List<string> pdfPaths = new List<string>();
-            for (var i = 0; i < startPages.Count; i++)
+            foreach (string item in pathsToSplit)
             {
-                int startPage = startPages[i];
-                int endPage = endPages[i];
-                Console.WriteLine("Start Page is: {0}", startPage);
-                Console.WriteLine("End Page is: {0}", endPage);
-                Console.WriteLine("----------------------");
-                string outputPdfPath = desitnationDirectory + "Manifest Part " + i + @".pdf";
-                SplitPDF(sourcePdfPath, outputPdfPath, startPage, endPage);
-                //ADD EACH PATH TO LIST
-                pdfPaths.Add(outputPdfPath);
+                Console.WriteLine("Manifest to split: {0}", item);
             }
-            Console.WriteLine("----------------------");
-            Console.WriteLine("Splitting finalized. Press Enter");
-            Console.ReadLine();
+            Console.WriteLine("------------------------------------------------------------------------------------------");
+            List<string> pdfPaths = new List<string>();
+            foreach (string pdf in pathsToSplit)
+            {
+                Console.WriteLine("Source is: " + pdf);
+                Console.WriteLine("Destination Directory is " + desitnationDirectory);
+                List<int> startPages = GetStartPage(pdf);
+                List<int> endPages = GetEndPage(startPages, pdf);
+
+                //ACTUAL SPLITTING
+                for (int i = 0; i < startPages.Count; i++)
+                {
+                    string shortName = System.IO.Path.GetFileNameWithoutExtension(pdf);
+                    int j = i + 1;
+                    int startPage = startPages[i];
+                    int endPage = endPages[i];
+                    Console.WriteLine("Start Page is: {0}", startPage);
+                    Console.WriteLine("End Page is: {0}", endPage);
+                    Console.WriteLine("----------------------");
+                    string outputPdfPath = desitnationDirectory + shortName + " part " + j + @".pdf";
+                    SplitPDF(pdf, outputPdfPath, startPage, endPage);
+                    //ADD EACH PATH TO LIST
+                    pdfPaths.Add(outputPdfPath);
+                }
+                startPages.Clear();
+                endPages.Clear();
+                Console.WriteLine("----------------------");
+                Console.WriteLine("Splitting finalized.");
+
+            }
+            Console.WriteLine("------------------------------------------------------------------------------------------");
             Console.WriteLine("Starting Printing Process");
-
-            string strIP = "198.62.42.1";
-            int portNum = 4444;
-            IPAddress printerIP = IPAddress.Parse(strIP);
-
+            Console.WriteLine("------------------------------------------------------------------------------------------");
             foreach (string item in pdfPaths)
             {
+                int i = 1;
+                Console.WriteLine(item + item[i]);
+                i++;
+            }
+            Console.ReadLine();
+            
+            string strIP = "10.100.20.79";
+            int portNum = 9100;
+            IPAddress printerIP = IPAddress.Parse(strIP);
+                
+           foreach (string item in pdfPaths)
+            {
                 Console.WriteLine("Printing path {0}", item);
-                SendData(item, printerIP, portNum);
+                PrintData(item, printerIP, portNum);
 
             }
+            
+            Console.WriteLine("Delete Directories?");
+            Console.WriteLine("Y for yes or N for no");
+            string tmpChar = Console.ReadLine();
+            switch (tmpChar)
+            {
+                case "y":
+                Directory.Delete(inputfolderPath, true);
+                Directory.Delete(outputfolderPath, true);
+                    break;
+                default:
+                    break;
+            }
+
         }
-        static public string GetSourcePath()
-        {
-            string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop) + @"\";
-            string fileName = "DriverManifest.pdf";
-            string result = desktopPath + fileName;
-            return result;
-        }
-        static public string CreateDestinationDirectory()
+
+        static public string CreateDestinationDirectory(string dirName)
         {
             string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-            string directoryName = "Split Manifest";
+            string directoryName = dirName;
             string outputDirectory = desktopPath + @"\" + directoryName + @"\";
             if (!Directory.Exists(outputDirectory))
             {
@@ -78,14 +123,14 @@ namespace RICOH_Printer_Project
             }
             return outputDirectory;
         }
-        static public List<int> GetStartPage()
+        static public List<int> GetStartPage(string source)
         {
-            string sourcePdfPath = GetSourcePath();
+            string sourcePdfPath = source;
             string searchParameter = "Total ";
             List<int> startPages = ReadPdfFile(sourcePdfPath, searchParameter);
             return startPages;
         }
-        static public List<int> GetEndPage(List<int> startPages)
+        static public List<int> GetEndPage(List<int> startPages, string source)
         {
             List<int> endPages = new List<int>();
             foreach (int item in startPages)
@@ -94,7 +139,7 @@ namespace RICOH_Printer_Project
                 endPages.Add(endPageTmp);
             }
             endPages.Remove(0);
-            string sourcePdfPath = GetSourcePath();
+            string sourcePdfPath = source;
             PdfReader pdf = new PdfReader(sourcePdfPath);
             int lastPage = pdf.NumberOfPages;
             endPages.Add(lastPage);
@@ -148,39 +193,36 @@ namespace RICOH_Printer_Project
                 Console.WriteLine(ex);
             }
         }
-
-        
-        
         static void PrintPDF(string splitPdfPath)
         {
             var openPdf = new ProcessStartInfo(splitPdfPath);
             openPdf.UseShellExecute = true;
             openPdf.Verb = "print";
             var process = Process.Start(openPdf);
-            
+
         }
-        static void SendData(string fileName, IPAddress printerIP, int printerPort)
+        static void PrintData(string fileName, IPAddress printerIP, int printerPort)
         {
-            
-                EndPoint ep = new IPEndPoint(printerIP, printerPort);
 
-                try
-                {
-                    using (Socket sock = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
-                    {
-                        sock.Connect(ep);
-                        NetworkStream ns = new NetworkStream(sock);
+            EndPoint ep = new IPEndPoint(printerIP, printerPort);
 
-                        byte[] toSend = File.ReadAllBytes(fileName);
-                    
-                        ns.Write(toSend, 0, toSend.Length);
-                    }
-                }
-                catch (Exception ex)
+            try
+            {
+                using (Socket sock = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
                 {
-                    Console.WriteLine(ex);
+                    sock.Connect(ep);
+                    NetworkStream ns = new NetworkStream(sock);
+
+                    byte[] toSend = File.ReadAllBytes(fileName);
+
+                    ns.Write(toSend, 0, toSend.Length);
                 }
-            
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex);
+            }
+
 
         }
 
