@@ -1,37 +1,221 @@
-Function Get_Store_Net_Cost_Of_Item(p_Item_Num        In Inv_Item.Item_Num%Type,
-                                      p_Sales_Uom_Code  In Qty_Uom_Lookup.Code%Type,
-                                      p_Customer_Num    In Crm_Customer.Customer_Num%Type,
-                                      p_Warehouse_Num   In Inv_Warehouse.Warehouse_Num%Type,
-                                      p_Weight_Uom_Code In Qty_Uom_Lookup.Code%Type,
-                                      p_Weight          In Inv_Item_Qty_Uom.Weight%Type)
+ Function Get_Store_Net_Cost_Of_Item(p_Item_Id       In Inv_Item.Item_Id%Type,
+                                      p_Sales_Uom_Id  In Inv_Item.Sales_Uom_Id%Type,
+                                      p_Customer_Id   In Inv_Item_Customer.Customer_Id%Type,
+                                      p_Warehouse_Id  In Inv_Warehouse.Warehouse_Id%Type,
+                                      p_Weight_Uom_Id In Inv_Item_Qty_Uom.Weight_Uom_Id%Type,
+                                      p_Weight        In Inv_Item_Qty_Uom.Weight%Type)
     Return Number As
-    v_Sales_Price_Group_Id Sal_Sales_Price_Group.Sales_Price_Group_Id%Type := 0;
-    v_Item_Id              Inv_Item.Item_Id%Type := 0;
-    v_Customer_Id          Crm_Customer.Customer_Id%Type := 0;
-    v_Sales_Uom_Id         Inv_Item.Sales_Uom_Id%Type := 0;
-    v_Warehouse_Id         Inv_Warehouse.Warehouse_Id%Type := 0;
-    v_Unit_Cost            Number(20, 5) := 0;
-    v_Weight_Uom_Id        Inv_Item_Qty_Uom.Weight_Uom_Id%Type := 0;
-    Vmessage               Uware_Error_Message.Message%Type := '';
-    Vdb_Error_Code         Uware_Error_Message.Db_Error_Code%Type := '';
-    Vdb_Error_Text         Uware_Error_Message.Db_Error_Message%Type := '';
+    v_Sales_Price_Group_Id   Sal_Sales_Price_Group.Sales_Price_Group_Id%Type := 0;
+    v_Markup                 Sal_Sales_Price_Group_Pricing.Markup_Percent%Type := 0;
+    v_Price_Multiplier  Sal_Sales_Price_Group_Pricing.Unit_Price_Multiplier%Type;
+    v_Unit_Price_Multiplier  Number(20, 5) := 0;
+    v_Unit_Price             Sal_Sales_Price_Group_Pricing.Unit_Price%Type := 0;
+    v_Average_Cost           Inv_Item_Warehouse_Storage.Average_Cost%Type := 0;
+    v_Charge_Percent         Sal_Sales_Price_Group_Adtl_Chg.Charge_Percent%Type := 0;
+    v_Charge_Multiplier  Sal_Sales_Price_Group_Adtl_Chg.Unit_Charge_Multiplier%Type;
+    v_Unit_Charge_Multiplier Number(20, 5) := 0;
+    v_Unit_Charge            Sal_Sales_Price_Group_Adtl_Chg.Unit_Charge%Type := 0;
+    v_Charge_Amount          Number(20, 5) := 0;
+    v_Unit_Cost              Number(20, 5) := 0;
+    v_Total_Charge_Amount    Number(20, 5) := 0;
+    Vmessage                 Uware_Error_Message.Message%Type := '';
+    Vdb_Error_Code           Uware_Error_Message.Db_Error_Code%Type := '';
+    Vdb_Error_Text           Uware_Error_Message.Db_Error_Message%Type := '';
+    v_Computation_Level      Sal_Sales_Price_Group_Adtl_Chg.Computation_Level_Id%Type := 0;
+    v_Qty_Per_Uom Number(20, 5):= 0;
+
+    Cursor Spg_Adtl_Chg_Cursor Is
+      Select Seq_Num,
+             Starting_Date,
+             Customer_Id,
+             Item_Option_Id,
+             Item_Id,
+             Charge_Percent,
+             Unit_Charge,
+             Unit_Charge_Multiplier,--To_Number(Nvl(Unit_Charge_Multiplier, 1)) As Unit_Charge_Multiplier,
+             Min_Quantity,
+             Sales_Uom_Id,
+             Apply_Discount,
+             Comments,
+             (Case
+               When Sales_Uom_Id Is Not Null And
+                    Sales_Uom_Id = p_Weight_Uom_Id Then
+                'Y'
+               Else
+                'N'
+             End) Is_Weight_Uom,
+             Computation_Level_Id
+        From Sal_Sales_Price_Group_Adtl_Chg Charge
+        Left Outer Join (Select Inventory_Group_Id, Level As Rank
+                           From Inv_Inventory_Group
+                          Start With Inventory_Group_Id =
+                                     (Select Inventory_Group_Id
+                                        From Inv_Item
+                                       Where Item_Id = p_Item_Id)
+                         Connect By Prior
+                                     Parent_Group_Id = Inventory_Group_Id) Ing
+          On Charge.Inventory_Group_Id = Ing.Inventory_Group_Id
+       Where Sales_Price_Group_Id = v_Sales_Price_Group_Id
+         And Trunc(Starting_Date) <= Trunc(Sysdate)
+         And (Trunc(Ending_Date) >= Trunc(Sysdate) Or
+             Trunc(Ending_Date) Is Null)
+         And (Customer_Id = p_Customer_Id Or Customer_Id Is Null)
+         And (Customer_Type_Id =
+             (Select Customer_Type_Id
+                 From Crm_Customer
+                Where Customer_Id = p_Customer_Id) Or
+             Customer_Type_Id Is Null)
+         And (Exists (Select Ccg.Group_Id
+                        From Crm_Cust_Group Ccg
+                       Where Ccg.Customer_Id = p_Customer_Id
+                         And Ccg.Group_Id = Charge.Customer_Group_Id) Or
+              Customer_Group_Id Is Null)
+         And (Item_Id = p_Item_Id Or
+             (Item_Id Is Null And (Ing.Inventory_Group_Id Is Not Null Or
+             Charge.Inventory_Group_Id Is Null)))
+         And (Exists (Select Ig.Group_Id
+                        From Inv_Item_Group Ig
+                       Where Ig.Item_Id = p_Item_Id
+                         And Ig.Group_Id = Charge.Item_Group_Id) Or
+              Item_Group_Id Is Null)
+            --And (Computation_Level_Id = 1 Or Computation_Level_Id Is Null)
+            --AND   MIN_QUANTITY <= 1
+         And (Sales_Uom_Id Is Null Or Sales_Uom_Id = p_Sales_Uom_Id Or
+             Sales_Uom_Id = p_Weight_Uom_Id)
+         And Param_Type_Id Is Null
+         And Param_Name Is Null
+         And Param_Value Is Null
+         AND Return_Reason_id is null
+        -- And Charge_Type_Id Not In (1, 2, 3, 4)
+         And (Item_Class_Id Is Null Or
+             Item_Class_Id =
+             (Select Inv.Item_Class_Id
+                 From Inv_Item Inv
+                Where Inv.Item_Id = p_Item_Id))
+       Order By Starting_Date        Desc Nulls Last,
+                Customer_Id          Desc Nulls Last,
+                Customer_Group_Id    Desc Nulls Last,
+                Item_Option_Id       Desc Nulls Last,
+                Item_Option_Group_Id Desc Nulls Last;
+    Cursor Spg_Pricing_Cursor Is
+      Select Markup_Percent,
+             Unit_Price,
+             Unit_Price_Multiplier, --To_Number(Nvl(Unit_Price_Multiplier, 1)) As Unit_Price_Multiplier,
+             Apply_Discount,
+             (Select Ccg.Group_Order
+                From Crm_Cust_Group Ccg
+               Where Ccg.Customer_Id = p_Customer_Id
+                 And Ccg.Group_Id = Price.Customer_Group_Id) Cust_Group
+        From Sal_Sales_Price_Group_Pricing Price
+        Left Outer Join (Select Inventory_Group_Id, Level As Rank
+                           From Inv_Inventory_Group
+                          Start With Inventory_Group_Id =
+                                     (Select Inventory_Group_Id
+                                        From Inv_Item
+                                       Where Item_Id = p_Item_Id)
+                         Connect By Prior
+                                     Parent_Group_Id = Inventory_Group_Id) Ing
+          On Price.Inventory_Group_Id = Ing.Inventory_Group_Id
+       Where Sales_Price_Group_Id = v_Sales_Price_Group_Id
+         And (Item_Id = p_Item_Id Or
+             (Item_Id = -1 And (Ing.Inventory_Group_Id Is Not Null Or
+             Price.Inventory_Group_Id Is Null)))
+         And (Exists (Select Ig.Group_Id
+                        From Inv_Item_Group Ig
+                       Where Ig.Item_Id = p_Item_Id
+                         And Ig.Group_Id = Price.Item_Group_Id) Or
+              Item_Group_Id Is Null)
+            --AND MIN_QUANTITY <= 1
+         And (Sales_Uom_Id Is Null Or Sales_Uom_Id = p_Sales_Uom_Id)
+         And Trunc(Starting_Date) <= Trunc(Sysdate)
+         And (Trunc(Ending_Date) >= Trunc(Sysdate) Or
+             Trunc(Ending_Date) Is Null)
+         And (Customer_Id = p_Customer_Id Or Customer_Id Is Null)
+         And (Customer_Type_Id =
+             (Select Customer_Type_Id
+                 From Crm_Customer
+                Where Customer_Id = p_Customer_Id) Or
+             Customer_Type_Id Is Null)
+         And (Exists (Select Ccg.Group_Id
+                        From Crm_Cust_Group Ccg
+                       Where Ccg.Customer_Id = p_Customer_Id
+                         And Ccg.Group_Id = Price.Customer_Group_Id) Or
+              Customer_Group_Id Is Null)
+      -- And (Computation_Level_Id = 1 Or Computation_Level_Id Is Null)
+       Order By Item_Id              Desc Nulls Last,
+                Ing.Rank             Asc,
+                Starting_Date        Desc Nulls Last,
+                Customer_Id          Desc Nulls Last,
+                Cust_Group           Desc Nulls Last,
+                Item_Option_Id       Desc Nulls Last,
+                Item_Option_Group_Id Desc Nulls Last,
+                Min_Quantity         Desc Nulls Last;
   Begin
-    v_Item_Id       := Get_Item_Id_By_Item_Num(p_Item_Num);
-    v_Customer_Id   := Get_Customer_Id_By_Num(p_Customer_Num);
-    v_Sales_Uom_Id  := Get_Uom_Id_By_Uom_Code(p_Sales_Uom_Code);
-    v_Warehouse_Id  := Get_Warehouse_Id_By_Num(p_Warehouse_Num);
-    v_Weight_Uom_Id := Get_Uom_Id_By_Uom_Code(p_Weight_Uom_Code);
-    v_Unit_Cost     := Get_Store_Net_Cost_Of_Item(v_Item_Id,
-                                                  v_Sales_Uom_Id,
-                                                  v_Customer_Id,
-                                                  v_Warehouse_Id,
-                                                  v_Weight_Uom_Id,
-                                                  p_Weight);
+    v_Sales_Price_Group_Id := Get_Spg_Id_By_Cust_Id_Or_Wh_Id(p_Customer_Id,
+                                                             p_Warehouse_Id);
+    v_Qty_Per_Uom:=GET_QTY_PER_UOM(p_Item_Id, p_Sales_Uom_Id);  
+
+    For Spg_Pricing_Cursor_Rec In Spg_Pricing_Cursor Loop
+      Begin
+        v_Markup                := Spg_Pricing_Cursor_Rec.Markup_Percent;
+        v_Price_Multiplier := Spg_Pricing_Cursor_Rec.Unit_Price_Multiplier;
+        v_Unit_Price            := Spg_Pricing_Cursor_Rec.Unit_Price;
+      
+        v_Average_Cost := Get_Warehouse_Average_Cost(p_Item_Id,
+                                                     p_Warehouse_Id,
+                                                     p_Sales_Uom_Id);
+ 
+          if UPPER(v_Price_Multiplier)='QTYPERUOM' then
+             v_Unit_Price_Multiplier:=v_Qty_Per_Uom;
+              else 
+              v_Unit_Price_Multiplier := TO_NUMBER(nvl(v_Price_Multiplier, 1));
+           End If;                                                   
+                                                     
+        If v_Unit_Price = 0 Then
+          v_Unit_Cost := v_Average_Cost * (1 + v_Markup / 100) *
+                         v_Unit_Price_Multiplier;
+        Else
+          v_Unit_Cost := v_Unit_Price * v_Unit_Price_Multiplier;
+        End If;
+        Exit;
+      End;
+    End Loop;
+    For Spg_Adtl_Chg_Cursor_Rec In Spg_Adtl_Chg_Cursor Loop
+      Begin
+        v_Charge_Percent         := Spg_Adtl_Chg_Cursor_Rec.Charge_Percent;
+        v_Charge_Multiplier  := Spg_Adtl_Chg_Cursor_Rec.Unit_Charge_Multiplier;
+        v_Unit_Charge            := Spg_Adtl_Chg_Cursor_Rec.Unit_Charge;
+        v_Computation_Level      := Spg_Adtl_Chg_Cursor_Rec.Computation_Level_Id;
+       
+       If UPPER(v_Charge_Multiplier)='QTYPERUOM' then
+             v_Unit_Charge_Multiplier :=v_Qty_Per_Uom;
+             else
+             v_Unit_Charge_Multiplier :=TO_NUMBER(nvl(v_Charge_Multiplier, 1));
+          End If;
+         
+        If v_Charge_Percent != 0 Then
+          If v_Computation_Level Is Null Or v_Computation_Level = 1 Then
+            v_Charge_Amount := v_Unit_Cost * v_Charge_Percent / 100 *
+                               v_Unit_Charge_Multiplier;
+          Else
+            v_Charge_Amount := v_Average_Cost * v_Charge_Percent / 100 *
+                               v_Unit_Charge_Multiplier;
+          End If;
+        Else
+          If 'Y' = Spg_Adtl_Chg_Cursor_Rec.Is_Weight_Uom Then
+            v_Unit_Charge := Round(v_Unit_Charge * p_Weight, 5);
+          End If;
+          v_Charge_Amount := v_Unit_Charge * v_Unit_Charge_Multiplier;
+        End If;
+        v_Total_Charge_Amount := v_Total_Charge_Amount + v_Charge_Amount;
+      End;
+    End Loop;
+    v_Unit_Cost := v_Unit_Cost + v_Total_Charge_Amount;
     Return v_Unit_Cost;
   Exception
     When Others Then
       Vmessage       := 'Error in retrieving store cost for ';
-      Vmessage       := Vmessage || p_Item_Num || ' for ' || p_Customer_Num ||
+      Vmessage       := Vmessage || p_Item_Id || ' for ' || p_Customer_Id ||
                         ' for ';
       Vmessage       := Vmessage || Sysdate || '.';
       Vdb_Error_Code := Sqlcode;
