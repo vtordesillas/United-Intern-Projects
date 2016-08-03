@@ -1,12 +1,10 @@
 using System;
 using System.Collections.Generic;
-using iTextSharp.text;
 using iTextSharp.text.pdf;
 using iTextSharp.text.pdf.parser;
 using System.IO;
-using System.Diagnostics;
-using System.Net;
-using System.Net.Sockets;
+using System.Printing;
+using Spire.Pdf;
 
 namespace RICOH_Printer_Project
 {
@@ -14,12 +12,14 @@ namespace RICOH_Printer_Project
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("------------------------------------------------------------------------------------------");
             string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
             string inputfolderPath = desktopPath + @"\Manifest Source";
             string outputfolderPath = desktopPath + @"\Split Manifests";
+
+            Console.WriteLine("--------------------------------------------------------------------------------");
             Console.WriteLine("Searching for Directories");
-            Console.WriteLine("------------------------------------------------------------------------------------------");
+            Console.WriteLine("--------------------------------------------------------------------------------");
+
             if (Directory.Exists(inputfolderPath))
             {
                 Console.WriteLine("Directory found!");
@@ -30,9 +30,10 @@ namespace RICOH_Printer_Project
                 string sourceDirectory = CreateDestinationDirectory("Manifest Source");
             }
             string desitnationDirectory = CreateDestinationDirectory("Split Manifests");
+
             Console.WriteLine("Please make sure all manifest files are saved");
             Console.WriteLine("in  PDF format in the \"Manifest Source\" Directory");
-            Console.WriteLine("Press Enter");
+            Console.WriteLine("Press Enter when ready to split.");
             Console.ReadLine();
             string[] pathsToSplit = Directory.GetFiles(inputfolderPath);
 
@@ -40,7 +41,7 @@ namespace RICOH_Printer_Project
             {
                 Console.WriteLine("Manifest to split: {0}", item);
             }
-            Console.WriteLine("------------------------------------------------------------------------------------------");
+            Console.WriteLine("----------------------------------------------------------------------------");
             List<string> pdfPaths = new List<string>();
             foreach (string pdf in pathsToSplit)
             {
@@ -61,7 +62,7 @@ namespace RICOH_Printer_Project
                     Console.WriteLine("----------------------");
                     string outputPdfPath = desitnationDirectory + shortName + " part " + j + @".pdf";
                     SplitPDF(pdf, outputPdfPath, startPage, endPage);
-                    //ADD EACH PATH TO LIST
+                //ADD EACH RESULT PATH TO LISTPDF
                     pdfPaths.Add(outputPdfPath);
                 }
                 startPages.Clear();
@@ -71,42 +72,53 @@ namespace RICOH_Printer_Project
 
             }
             Console.WriteLine("------------------------------------------------------------------------------------------");
-            Console.WriteLine("Starting Printing Process");
+            Console.WriteLine("Starting Conversion Process");
             Console.WriteLine("------------------------------------------------------------------------------------------");
+
+            List<string> xpsPaths = new List<string>();
             foreach (string item in pdfPaths)
             {
-                int i = 1;
-                Console.WriteLine(item + item[i]);
-                i++;
+                string shortName = System.IO.Path.GetFileNameWithoutExtension(item);
+                string outputFileName = outputfolderPath + @"\" + shortName + ".xps";
+                Console.WriteLine("Converting {0} to XPS format...", shortName);
+                PdfToXPS(item, outputFileName);
+                xpsPaths.Add(outputFileName);
             }
-            Console.ReadLine();
+            Console.WriteLine("------------------------------------------------------------------------------------------");
+            Console.WriteLine("Starting Printing Process");
+            Console.WriteLine("------------------------------------------------------------------------------------------");
             
-            string strIP = "10.100.20.79";
-            int portNum = 9100;
-            IPAddress printerIP = IPAddress.Parse(strIP);
-                
-           foreach (string item in pdfPaths)
+            //CONFIGURE PRINTER SETTINGS
+            PrintServer server = new PrintServer();
+            string printer = "RICOH-4500-IT";
+            PrintQueue queue = server.GetPrintQueue(printer);
+            PrintTicket ticket = new PrintTicket();
+            ticket.Stapling = Stapling.StapleTopLeft;
+            foreach (string item in xpsPaths)
             {
-                Console.WriteLine("Printing path {0}", item);
-                PrintData(item, printerIP, portNum);
-
+                string shortName = System.IO.Path.GetFileNameWithoutExtension(item);
+                Console.WriteLine("Printing {0}...", shortName);
+                //queue.AddJob(item, ticket);
+                
             }
-            
             Console.WriteLine("Delete Directories?");
             Console.WriteLine("Y for yes or N for no");
             string tmpChar = Console.ReadLine();
             switch (tmpChar)
             {
                 case "y":
-                Directory.Delete(inputfolderPath, true);
-                Directory.Delete(outputfolderPath, true);
+                    Directory.Delete(inputfolderPath, true);
+                    Directory.Delete(outputfolderPath, true);
+                    break;
+                case "Y":
+                    Directory.Delete(inputfolderPath, true);
+                    Directory.Delete(outputfolderPath, true);
                     break;
                 default:
                     break;
             }
-
         }
-
+        //END OF MAIN METHOD
         static public string CreateDestinationDirectory(string dirName)
         {
             string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
@@ -169,14 +181,14 @@ namespace RICOH_Printer_Project
         static void SplitPDF(string sourcePdfPath, string outputPdfPath, int startPage, int endPage)
         {
             PdfReader reader = null;
-            Document sourceDocument = null;
+            iTextSharp.text.Document sourceDocument = null;
             PdfCopy pdfCopyProvider = null;
             PdfImportedPage importedPage = null;
 
             try
             {
                 reader = new PdfReader(sourcePdfPath);
-                sourceDocument = new Document(reader.GetPageSizeWithRotation(startPage));
+                sourceDocument = new iTextSharp.text.Document(reader.GetPageSizeWithRotation(startPage));
                 pdfCopyProvider = new PdfCopy(sourceDocument,
                     new FileStream(outputPdfPath, FileMode.Create));
                 sourceDocument.Open();
@@ -192,40 +204,13 @@ namespace RICOH_Printer_Project
             {
                 Console.WriteLine(ex);
             }
-        }
-        static void PrintPDF(string splitPdfPath)
+        }            
+        static void PdfToXPS(string pdfPath, string outputFileName)
         {
-            var openPdf = new ProcessStartInfo(splitPdfPath);
-            openPdf.UseShellExecute = true;
-            openPdf.Verb = "print";
-            var process = Process.Start(openPdf);
-
+            Spire.Pdf.PdfDocument Doc = new Spire.Pdf.PdfDocument();
+            Doc.LoadFromFile(pdfPath);
+            Doc.SaveToFile(outputFileName, FileFormat.XPS);
+            File.Delete(pdfPath);
         }
-        static void PrintData(string fileName, IPAddress printerIP, int printerPort)
-        {
-
-            EndPoint ep = new IPEndPoint(printerIP, printerPort);
-
-            try
-            {
-                using (Socket sock = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
-                {
-                    sock.Connect(ep);
-                    NetworkStream ns = new NetworkStream(sock);
-
-                    byte[] toSend = File.ReadAllBytes(fileName);
-
-                    ns.Write(toSend, 0, toSend.Length);
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex);
-            }
-
-
-        }
-
-
     }
 }
